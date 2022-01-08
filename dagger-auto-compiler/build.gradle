@@ -1,0 +1,7 @@
+
+dependencies {
+    api project(":dagger-auto")
+    compileOnly 'com.google.dagger:dagger-compiler:2.+' //TODO: only needed if using actual classes
+    compileOnly 'com.google.auto.service:auto-service-annotations:1.0.1'
+    annotationProcessor 'com.google.auto.service:auto-service:1.0.1'
+}

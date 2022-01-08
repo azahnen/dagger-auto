@@ -1,0 +1,12 @@
+
+subprojects {
+    apply plugin: 'java-library'
+
+    group = 'com.github.azahnen'
+
+    version = '1.0.0'
+
+    repositories {
+        mavenCentral()
+    }
+}
