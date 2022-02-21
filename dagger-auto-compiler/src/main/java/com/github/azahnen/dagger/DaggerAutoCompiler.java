@@ -15,6 +15,15 @@ import java.util.stream.Stream;
 public class DaggerAutoCompiler {
 
   Map<String, String> compile(List<Module> modules) {
+    /*modules.forEach(module -> System.out.println(module.moduleName + "\n  - "
+        + module.bindings.stream()
+          .filter(binding -> binding instanceof SingleBinding)
+          .map(binding -> ((SingleBinding)binding).implementationFullName + " " + ((SingleBinding)binding).injections.toString() + " " + ((SingleBinding) binding).multiBindOtherModule)
+          .collect(Collectors.joining("\n  - "))
+        + module.bindings.stream()
+        .filter(binding -> binding instanceof MultiBinding)
+        .map(binding -> ((MultiBinding)binding).interfaceFullName + " MULTI")
+        .collect(Collectors.joining("\n  - "))));*/
     List<Module> simpleModules =
         modules.stream().filter(module -> !module.encapsulate).collect(Collectors.toList());
     List<Module> encapsulatedModules =
@@ -69,7 +78,8 @@ public class DaggerAutoCompiler {
         .map(
             module -> {
               String fileName = module.qualifiedName();
-              String fileContent = compileWrapperModule(module, componentNameSuffix, moduleNameSuffix);
+              String fileContent =
+                  compileWrapperModule(module, componentNameSuffix, moduleNameSuffix);
 
               return new SimpleEntry<>(fileName, fileContent);
             })
@@ -85,7 +95,7 @@ public class DaggerAutoCompiler {
 
     String multiBindingsString =
         module.bindings.stream()
-            .filter(binding -> binding instanceof MultiBinding)
+            .filter(binding -> binding instanceof MultiBinding && !isForeign(module, (MultiBinding) binding))
             .map(
                 binding ->
                     encapsulate
@@ -93,28 +103,70 @@ public class DaggerAutoCompiler {
                         : compileMultiBinding((MultiBinding) binding))
             .collect(Collectors.joining("\n\n"));
 
+    //TODO: instead of the changes in the compiler for injected multibindings from another module
+    // it might be better to create actual MultiBindings in parser with a flag like foreign
+    String multiBindingsStringInjected = encapsulate ? module.bindings.stream()
+        .filter(binding -> binding instanceof SingleBinding)
+        .flatMap(binding -> ((SingleBinding)binding).injections.entrySet().stream())
+        .filter(entry -> isMulti(entry.getKey()) && !isBound(entry.getKey(), module.bindings))
+        .map(
+            entry ->
+                String.format(
+                    "@javax.inject.Singleton\n"
+                        + "@dagger.Provides\n"
+                        + "@dagger.multibindings.ElementsIntoSet\n"
+                        + "static %1$s %2$sExternal(%3$s externalMultiBindings) {\n"
+                        + "\treturn externalMultiBindings.%2$s()%4$s;\n"
+                        + "}",
+                    noLazy(entry.getKey()),
+                    entry.getValue(),
+                    "ExternalMultiBindings",
+                    isLazy(entry.getKey()) ? ".get()" : ""))
+        .collect(Collectors.joining("\n\n")) : "";
+
     String externalMultiBindings =
         encapsulate
             ? compileExternalMultiBindingsWrapper(
                 module.bindings.stream()
-                    .filter(binding -> binding instanceof MultiBinding)
+                    .filter(binding -> binding instanceof MultiBinding && !isForeign(module, (MultiBinding) binding))
                     .map(binding -> (MultiBinding) binding)
-                    .collect(Collectors.toList()))
+                    .collect(Collectors.toList()),
+            module.bindings.stream()
+                .filter(binding -> binding instanceof SingleBinding)
+                .flatMap(binding -> ((SingleBinding)binding).injections.entrySet().stream())
+                .filter(entry -> isMulti(entry.getKey()) && !isBound(entry.getKey(), module.bindings))
+                .collect(Collectors.toList()))
             : "";
 
     return String.format(
-        "package %s;\n\n@dagger.Module\npublic interface %s {\n\n%s\n\n%s\n\n%s\n\n}",
+        "package %s;\n\n@dagger.Module\npublic interface %s {\n\n%s\n\n%s\n\n%s\n\n%s\n\n}",
         module.packageName,
         module.moduleName + nameSuffix,
         singleBindingsString,
         multiBindingsString,
+        multiBindingsStringInjected,
         externalMultiBindings);
+  }
+
+  //TODO
+  private boolean isForeign(Module module, MultiBinding multiBinding) {
+    return !module.packageName.startsWith("de.ii.xtraplatform.web")
+        && (multiBinding.interfaceFullName.endsWith(".Binder")
+    || multiBinding.interfaceFullName.endsWith(".ContainerResponseFilter")
+    || multiBinding.interfaceFullName.endsWith(".ContainerRequestFilter")
+        || multiBinding.interfaceFullName.endsWith(".ExceptionMapper<?>")
+        || multiBinding.interfaceFullName.endsWith(".ExceptionMapper"));
   }
 
   // TODO: scope
   private String compileWrapperComponent(
       Module module, String nameSuffix, String moduleNameSuffix) {
-    String bindingsString = compileWrapperComponentBindings(module.bindings);
+    List<Binding> filtered = module.bindings.stream()
+        .filter(binding -> binding instanceof SingleBinding || (binding instanceof MultiBinding
+            && !isForeign(module,
+            (MultiBinding) binding)))
+        .collect(Collectors.toList());
+    String bindingsString = compileWrapperComponentBindings(filtered);
 
     String injections =
         module.bindings.stream()
@@ -125,11 +177,7 @@ public class DaggerAutoCompiler {
                     binding.injections.entrySet().stream()
                         .filter(
                             entry ->
-                                module.bindings.stream()
-                                    .noneMatch(
-                                        binding1 ->
-                                            Objects.equals(
-                                                binding1.getInterface(), entry.getKey())))
+                                !isMulti(entry.getKey()) && !isBound(entry.getKey(), module.bindings))
                         .map(
                             entry ->
                                 String.format(
@@ -156,6 +204,31 @@ public class DaggerAutoCompiler {
         builder);
   }
 
+  static boolean isBound(String injection, List<Binding> bindings) {
+    return bindings.stream()
+        .anyMatch(
+            binding1 ->
+                Objects.equals(binding1.getInterface(), injection)
+                    || Objects.equals(
+                    toLazy(binding1.getInterface()),
+                    injection));
+  }
+  static boolean isMulti(String injection) {
+    return injection.startsWith("java.util.Set<") || injection.startsWith("dagger.Lazy<java.util.Set<");
+  }
+  static String noMulti(String intrfc) {
+    return isMulti(intrfc) ? intrfc.substring(0, intrfc.length()-1).replace("java.util.Set<", "") : intrfc;
+  }
+  static boolean isLazy(String injection) {
+    return injection.startsWith("dagger.Lazy<");
+  }
+  static String toLazy(String intrfc) {
+    return String.format("dagger.Lazy<%s>", intrfc);
+  }
+  static String noLazy(String intrfc) {
+    return isLazy(intrfc) ? intrfc.substring(0, intrfc.length()-1).replace("dagger.Lazy<", "") : intrfc;
+  }
+
   private String compileWrapperModule(
       Module module, String componentNameSuffix, String moduleNameSuffix) {
     String componentName = module.qualifiedName() + componentNameSuffix;
@@ -163,14 +236,21 @@ public class DaggerAutoCompiler {
         String.format("%s.Dagger%s%s", module.packageName, module.moduleName, componentNameSuffix);
     // TODO
     String injections = "";
+
+    List<Binding> filtered = module.bindings.stream()
+        .filter(binding -> binding instanceof SingleBinding || (binding instanceof MultiBinding
+            && !isForeign(module,
+            (MultiBinding) binding)))
+        .collect(Collectors.toList());
+
     String builder =
         compileWrapperModuleComponentCreator(
-            module.bindings,
+            filtered,
             componentName,
             daggerComponentName,
             module.qualifiedName() + moduleNameSuffix);
 
-    String bindingsString = compileWrapperModuleBindings(module.bindings, componentName);
+    String bindingsString = compileWrapperModuleBindings(filtered, componentName);
 
     return String.format(
         "package %s;\n\n@dagger.Module\npublic interface %s {\n\n%s\n\n%s\n\n}",
@@ -189,7 +269,10 @@ public class DaggerAutoCompiler {
                   if (!externalMultiBindings.contains((singleBinding.interfaceFullName))) {
                     externalMultiBindings.add(singleBinding.interfaceFullName);
                     return Stream.of(compileMultiBindingForWrapperComponent(singleBinding));
-                  }
+                  } /*else if (singleBinding.multiBindOtherModule) {
+                    return Stream.of(
+                        compileMultiBindingForWrapperComponent(singleBinding));
+                  }*/
                   return Stream.empty();
                 }
 
@@ -221,7 +304,10 @@ public class DaggerAutoCompiler {
                     externalMultiBindings.add(singleBinding.interfaceFullName);
                     return Stream.of(
                         compileMultiBindingForWrapperModule(singleBinding, componentName));
-                  }
+                  } /*else if (singleBinding.multiBindOtherModule) {
+                    return Stream.of(
+                        compileMultiBindingForWrapperModule(singleBinding, componentName));
+                  }*/
                   return Stream.empty();
                 }
 
@@ -271,8 +357,7 @@ public class DaggerAutoCompiler {
                       case SET:
                       default:
                         return Stream.of(
-                            String.format(
-                                "java.util.Set<%s> %s", multiBinding.interfaceFullName, paramName));
+                            String.format("%s %s", multiBinding.getInterfaceLazy(), paramName));
                     }
                   }
                   return Stream.empty();
@@ -289,17 +374,13 @@ public class DaggerAutoCompiler {
                     binding.injections.entrySet().stream()
                         .filter(
                             entry ->
-                                bindings.stream()
-                                    .noneMatch(
-                                        binding1 ->
-                                            Objects.equals(
-                                                binding1.getInterface(), entry.getKey())))
+                                !isMulti(entry.getKey()) && !isBound(entry.getKey(), bindings))
                         .map(entry -> String.format("\t.%1$s(%1$s)", entry.getValue())))
             .distinct()
             .collect(Collectors.joining("\n"));
 
     String externalMultiBindings =
-        bindings.stream()
+        Stream.concat(bindings.stream()
             .filter(binding -> binding instanceof MultiBinding)
             .map(binding -> (MultiBinding) binding)
             .map(
@@ -309,8 +390,19 @@ public class DaggerAutoCompiler {
                           + binding.interfaceSimpleName.substring(1);
                   return String.format(
                       "\t\t\tpublic %1$s %2$s() {return %2$s;}",
-                      binding.getInterface(), methodName);
-                })
+                      binding.getInterfaceLazy(), methodName);
+                }),
+                bindings.stream()
+                    .filter(binding -> binding instanceof SingleBinding)
+                    .flatMap(binding -> ((SingleBinding)binding).injections.entrySet().stream())
+                    .filter(entry -> isMulti(entry.getKey()) && !isBound(entry.getKey(), bindings))
+                    .map(
+                        entry -> {
+                          return String.format(
+                              "\t\t\tpublic %1$s %2$s() {return %2$s;}",
+                              entry.getKey(), entry.getValue());
+                        })
+                )
             .distinct()
             .collect(Collectors.joining("\n"));
 
@@ -386,17 +478,7 @@ public class DaggerAutoCompiler {
         binding.interfaceSimpleName.substring(0, 1).toLowerCase()
             + binding.interfaceSimpleName.substring(1);
 
-    switch (binding.multiBind) {
-      case STRING_MAP:
-        return String.format(
-            "java.util.Map<String, %s> %s();", binding.interfaceFullName, methodName);
-      case CLASS_MAP:
-        return String.format(
-            "java.util.Map<Class<?>, %s> %s();", binding.interfaceFullName, methodName);
-      case SET:
-      default:
-        return String.format("java.util.Set<%s> %s();", binding.interfaceFullName, methodName);
-    }
+    return String.format("%s %s();", binding.getInterfaceLazy(), methodName);
   }
 
   private String compileMultiBindingForWrapperComponent(SingleBinding binding) {
@@ -442,15 +524,18 @@ public class DaggerAutoCompiler {
                 + "@dagger.Provides\n"
                 + "@dagger.multibindings.ElementsIntoSet\n"
                 + "static java.util.Set<%1$s> %2$sExternal(%3$s externalMultiBindings) {\n"
-                + "\treturn externalMultiBindings.%2$s();\n"
+                + "\treturn externalMultiBindings.%2$s()%4$s;\n"
                 + "}",
-            binding.interfaceFullName, methodName, externalMultiBindings);
+            binding.interfaceFullName,
+            methodName,
+            externalMultiBindings,
+            binding.lazy ? ".get()" : "");
     }
   }
 
-  private String compileExternalMultiBindingsWrapper(List<MultiBinding> bindings) {
+  private String compileExternalMultiBindingsWrapper(List<MultiBinding> bindings, List<Map.Entry<String, String>> injections) {
     String externalMultiBindings = "ExternalMultiBindings";
-    return bindings.stream()
+    return Stream.concat(bindings.stream()
         .map(
             binding -> {
               String methodName =
@@ -471,10 +556,11 @@ public class DaggerAutoCompiler {
                   // methodName);
                 case SET:
                 default:
-                  return String.format(
-                      "\tjava.util.Set<%s> %s();", binding.interfaceFullName, methodName);
+                  return String.format("\t%s %s();", binding.getInterfaceLazy(), methodName);
               }
-            })
+            }),
+            injections.stream()
+                .map(entry -> String.format("\t%s %s();", entry.getKey(), entry.getValue())))
         .collect(
             Collectors.joining(
                 "\n", String.format("interface %s {\n", externalMultiBindings), "\n}"));

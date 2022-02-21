@@ -10,4 +10,5 @@ public @interface AutoModule {
   boolean single() default false;
   //String pkg() default "";
   boolean encapsulate() default false;
+  Class<?>[] multiBindings() default {};
 }

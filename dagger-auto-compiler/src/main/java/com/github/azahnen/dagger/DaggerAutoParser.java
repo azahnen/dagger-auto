@@ -4,6 +4,7 @@ import com.github.azahnen.dagger.annotations.AutoBind;
 import com.github.azahnen.dagger.annotations.AutoModule;
 import com.github.azahnen.dagger.annotations.AutoMultiBind;
 import com.github.azahnen.dagger.annotations.AutoMultiBind.Type;
+import dagger.assisted.AssistedFactory;
 import java.lang.annotation.Annotation;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.ArrayList;
@@ -15,7 +16,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
@@ -52,8 +52,14 @@ class DaggerAutoParser {
         roundEnvironment.getElementsAnnotatedWith(annotationTypes.get(AutoMultiBind.class));
 
     List<Module> predefinedModules = parseModules(autoModuleElements);
+    // TODO: also pass multiBindings from module to parseBindings
+    List<String> foreignMultiBindings = predefinedModules.stream()
+        .flatMap(module -> module.bindings.stream())
+        .filter(binding -> binding instanceof MultiBinding)
+        .map(binding -> ((MultiBinding) binding).interfaceFullName)
+        .collect(Collectors.toList());
 
-    List<Binding> bindings = parseBindings(annotations, autoBindElements, autoMultiBindElements);
+    List<Binding> bindings = parseBindings(annotations, autoBindElements, autoMultiBindElements, foreignMultiBindings);
 
     if (predefinedModules.size() == 1 && predefinedModules.get(0).single) {
       predefinedModules.get(0).bindings.addAll(bindings);
@@ -121,9 +127,13 @@ class DaggerAutoParser {
                   element.getKind() == ElementKind.MODULE
                       || getAnnotationValue(element, AutoModule.class, "encapsulate", Boolean.class)
                           .orElse(false);
+              List<Binding> multiBindings =
+                  getAnnotationValueClassArray(element, AutoModule.class, "multiBindings").stream()
+                      .map(typeMirror -> processingEnv.getTypeUtils().asElement(typeMirror))
+                      .map(this::parseMultiBinding)
+                      .collect(Collectors.toList());
 
-              return new Module(
-                  packageName, moduleName, new ArrayList<>(), isSingle, isEncapsulate);
+              return new Module(packageName, moduleName, multiBindings, isSingle, isEncapsulate);
             })
         .collect(Collectors.toUnmodifiableList());
   }
@@ -131,14 +141,15 @@ class DaggerAutoParser {
   private List<Binding> parseBindings(
       Set<? extends TypeElement> annotations,
       Set<? extends Element> autoBindElements,
-      Set<? extends Element> autoMultiBindElements) {
+      Set<? extends Element> autoMultiBindElements,
+      List<String> foreignMultiBindings) {
     return annotations.stream()
         .flatMap(
             annotation -> {
               if (isSame(annotation, AutoBind.class)) {
                 return autoBindElements.stream()
                     .flatMap(
-                        element -> parseSingleBindings(element, autoMultiBindElements).stream());
+                        element -> parseSingleBindings(element, autoMultiBindElements, foreignMultiBindings).stream());
               } else if (isSame(annotation, AutoMultiBind.class)) {
                 return autoMultiBindElements.stream().map(this::parseMultiBinding);
               }
@@ -148,42 +159,71 @@ class DaggerAutoParser {
   }
 
   private List<SingleBinding> parseSingleBindings(
-      Element element, Set<? extends Element> autoMultiBindElements) {
-    List<TypeMirror> interfaces =
-        getAnnotationValueClassArray(element, AutoBind.class, "interfaces");
+      Element element, Set<? extends Element> autoMultiBindElements,
+      List<String> foreignMultiBindings) {
+    Map<String, TypeMirror> interfaces =
+        getAnnotationValueClassArray(element, AutoBind.class, "interfaces").stream()
+            .collect(
+                Collectors.toMap(
+                    typeMirror ->
+                        getFullNameWithGenericsAsWildcard(
+                            processingEnv.getTypeUtils().asElement(typeMirror)),
+                    Function.identity(),
+                    (first, second) -> first));
 
-    interfaces.forEach(
-        intrfc -> {
-          if (getSuperTypes(element.asType())
-              .noneMatch(superType -> Objects.equals(superType, intrfc))) {
-            throw new IllegalStateException(
-                "Invalid entry in @AutoBind interfaces, "
-                    + intrfc.toString()
-                    + " is not implemented/extended by "
-                    + element.toString());
-          }
-        });
+    interfaces
+        .keySet()
+        .forEach(
+            intrfc -> {
+              if (getSuperTypes(element.asType())
+                  .noneMatch(
+                      superType ->
+                          Objects.equals(
+                              getFullNameWithGenericsAsWildcard(
+                                  processingEnv.getTypeUtils().asElement(superType)),
+                              intrfc))) {
+                throw new IllegalStateException(
+                    "Invalid entry in @AutoBind interfaces, "
+                        + intrfc
+                        + " is not implemented/extended by "
+                        + element.toString()
+                        + ".\nValid interfaces are "
+                        + getSuperTypes(element.asType())
+                            .map(
+                                typeMirror ->
+                                    getFullNameWithGenericsAsWildcard(
+                                        processingEnv.getTypeUtils().asElement(typeMirror)))
+                            .collect(Collectors.joining(", ")));
+              }
+            });
 
     // TypeMirror.equals does not work, so we have to use a map to get distinct values
     Map<String, TypeMirror> bindInterfaces =
         getSuperTypes(element.asType())
-            .filter(superType -> interfaces.isEmpty() || interfaces.contains(superType))
-            .collect(Collectors.toMap(TypeMirror::toString, Function.identity(), (first, second) -> first));
+            .filter(
+                superType ->
+                    interfaces.isEmpty()
+                        || interfaces.containsKey(
+                            getFullNameWithGenericsAsWildcard(
+                                processingEnv.getTypeUtils().asElement(superType))))
+            .collect(
+                Collectors.toMap(
+                    TypeMirror::toString, Function.identity(), (first, second) -> first));
 
-
-    return bindInterfaces.values()
-        .stream()
+    return bindInterfaces.values().stream()
         .map(
             bindInterface ->
                 parseSingleBinding(
                     processingEnv.getTypeUtils().asElement(bindInterface),
                     element,
-                    autoMultiBindElements))
+                    autoMultiBindElements,
+                    foreignMultiBindings))
         .collect(Collectors.toList());
   }
 
   private SingleBinding parseSingleBinding(
-      Element bindInterface, Element implementation, Set<? extends Element> autoMultiBindElements) {
+      Element bindInterface, Element implementation, Set<? extends Element> autoMultiBindElements,
+      List<String> foreignMultiBindings) {
     String packageName =
         processingEnv.getElementUtils().getPackageOf(implementation).getQualifiedName().toString();
     String interfaceFullName = getFullNameWithGenericsAsWildcard(bindInterface);
@@ -197,12 +237,14 @@ class DaggerAutoParser {
                 bindInterface, AutoMultiBind.class, "value", Type.class, Type::valueOf)
             .or(
                 () ->
-                    hasAnnotation(bindInterface, AutoMultiBind.class)
+                    hasAnnotation(bindInterface, AutoMultiBind.class) || foreignMultiBindings.contains(interfaceFullName)
                         ? Optional.of(Type.SET)
                         : Optional.empty());
     Optional<String> multiBindKey =
         multiBind.flatMap(type -> getMultiBindKey(type, implementation));
     boolean multiBindSameModule = autoMultiBindElements.contains(bindInterface);
+    boolean multiBindOtherModule = foreignMultiBindings.contains(interfaceFullName);
+
     Map<String, String> injections = getInjections((TypeElement) implementation);
 
     return new SingleBinding(
@@ -214,6 +256,7 @@ class DaggerAutoParser {
         multiBind,
         multiBindKey,
         multiBindSameModule,
+        multiBindOtherModule,
         injections);
   }
 
@@ -251,11 +294,18 @@ class DaggerAutoParser {
               if (member.getKind() == ElementKind.CONSTRUCTOR) {
                 return ((ExecutableElement) member)
                     .getParameters().stream()
+                        .filter(
+                            variableElement ->
+                                !hasAnnotation(
+                                    processingEnv
+                                        .getTypeUtils()
+                                        .asElement(variableElement.asType()),
+                                    AssistedFactory.class))
                         .map(
                             variableElement ->
                                 new SimpleEntry<>(
                                     variableElement.asType().toString(),
-                                    variableElement.getSimpleName().toString()));
+                                    getCommonVariableName(variableElement)));
               }
 
               return Stream.empty();
@@ -272,28 +322,49 @@ class DaggerAutoParser {
         getAnnotationValueEnum(
                 bindInterface, AutoMultiBind.class, "value", Type.class, Type::valueOf)
             .orElse(Type.SET);
+    boolean lazy =
+        getAnnotationValue(bindInterface, AutoMultiBind.class, "lazy", Boolean.class).orElse(true);
 
-    return new MultiBinding(packageName, interfaceFullName, interfaceSimpleName, type);
+    return new MultiBinding(packageName, interfaceFullName, interfaceSimpleName, type, lazy);
   }
 
   private Stream<TypeMirror> getSuperTypes(TypeMirror type) {
     return processingEnv.getTypeUtils().directSupertypes(type).stream()
         .flatMap(superType -> Stream.concat(Stream.of(superType), getSuperTypes(superType)))
+        .filter(
+            superType ->
+                processingEnv
+                    .getTypeUtils()
+                    .asElement(superType)
+                    .getKind()
+                    .isInterface()) // TODO does it work?
         .filter(superType -> !Objects.equals(superType.toString(), "java.lang.Object"));
   }
 
-  private String getFullNameWithGenerics(Element element) {
-    return element.asType().toString();
+  private String getCommonVariableName(VariableElement variableElement) {
+    String name = variableElement.asType().toString();
+    boolean isMulti = DaggerAutoCompiler.isMulti(name);
+    name = DaggerAutoCompiler.noMulti(DaggerAutoCompiler.noLazy(name));
+    int ni = name.lastIndexOf('.');
+    int ti = name.indexOf('<');
+    name = name.substring(ni > 0 ? ni + 1 : 0, ti > 0 ? ti : name.length());
+    name += isMulti && !name.endsWith("s") ? "s" : "";
+    name = name.substring(0, 1).toLowerCase() + name.substring(1);
+
+    return name;
   }
+
   private String getFullNameWithGenericsAsWildcard(Element element) {
     if (element.asType() instanceof DeclaredType) {
-      List<? extends TypeMirror> typeArguments = ((DeclaredType) element.asType()).getTypeArguments();
-      String typeString = typeArguments.isEmpty()
-          ? ""
-          : typeArguments.stream()
-          .map(TypeMirror::toString)
-          .map(type -> type.length() == 1 ? "?" : type)
-          .collect(Collectors.joining(", ", "<", ">"));
+      List<? extends TypeMirror> typeArguments =
+          ((DeclaredType) element.asType()).getTypeArguments();
+      String typeString =
+          typeArguments.isEmpty()
+              ? ""
+              : typeArguments.stream()
+                  .map(TypeMirror::toString)
+                  .map(type -> type.length() == 1 ? "?" : type)
+                  .collect(Collectors.joining(", ", "<", ">"));
       /*int numTypeArguments = ((DeclaredType) element.asType()).getTypeArguments().size();
       if (numTypeArguments > 0) {
         return element.toString()

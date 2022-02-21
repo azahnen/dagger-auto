@@ -7,13 +7,16 @@ class MultiBinding implements Binding {
   final String interfaceFullName;
   final String interfaceSimpleName;
   final Type multiBind;
+  final boolean lazy;
 
   MultiBinding(
-      String packageName, String interfaceFullName, String interfaceSimpleName, Type multiBind) {
+      String packageName, String interfaceFullName, String interfaceSimpleName, Type multiBind,
+      boolean lazy) {
     this.packageName = packageName;
     this.interfaceFullName = interfaceFullName;
     this.interfaceSimpleName = interfaceSimpleName;
     this.multiBind = multiBind;
+    this.lazy = lazy;
   }
 
   @Override
@@ -32,5 +35,14 @@ class MultiBinding implements Binding {
       default:
         return String.format("java.util.Set<%s>", interfaceFullName);
     }
+  }
+
+  @Override
+  public String getInterfaceLazy() {
+    if (lazy) {
+      return String.format("dagger.Lazy<%s>", getInterface());
+    }
+
+    return getInterface();
   }
 }

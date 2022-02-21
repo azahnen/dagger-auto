@@ -14,13 +14,14 @@ class SingleBinding implements Binding {
   final Optional<AutoMultiBind.Type> multiBind;
   final Optional<String> multiBindKey;
   final boolean multiBindSameModule;
+  final boolean multiBindOtherModule;
   final Map<String, String> injections;
 
   SingleBinding(String packageName, String implementationFullName,
       String implementationSimpleName,
       String interfaceFullName, String interfaceSimpleName,
       Optional<Type> multiBind, Optional<String> multiBindKey, boolean multiBindSameModule,
-      Map<String, String> injections) {
+      boolean multiBindOtherModule, Map<String, String> injections) {
     this.packageName = packageName;
     this.interfaceFullName = interfaceFullName;
     this.interfaceSimpleName = interfaceSimpleName;
@@ -29,6 +30,7 @@ class SingleBinding implements Binding {
     this.multiBind = multiBind;
     this.multiBindKey = multiBindKey;
     this.multiBindSameModule = multiBindSameModule;
+    this.multiBindOtherModule = multiBindOtherModule;
     this.injections = injections;
   }
 
