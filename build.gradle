@@ -1,12 +1,65 @@
 
 subprojects {
     apply plugin: 'java-library'
+    apply plugin: 'maven-publish'
+    apply plugin: 'signing'
 
-    group = 'com.github.azahnen'
+    group = 'io.github.azahnen'
 
-    version = '1.0.0'
+    version = '1.0.0-SNAPSHOT'
 
     repositories {
         mavenCentral()
+    }
+
+    java {
+        withJavadocJar()
+        withSourcesJar()
+    }
+
+    ext.isReleaseVersion = !version.endsWith("SNAPSHOT")
+
+    publishing {
+        repositories {
+            maven {
+                def releaseRepo = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
+                def snapshotRepo = "https://s01.oss.sonatype.org/content/repositories/snapshots/"
+                url = isReleaseVersion ? releaseRepo : snapshotRepo
+                credentials {
+                    username = project.hasProperty('ossrhUsername') ? ossrhUsername : "Unknown user"
+                    password = project.hasProperty('ossrhPassword') ? ossrhPassword : "Unknown password"
+                }
+            }
+        }
+
+        publications {
+            mavenJava(MavenPublication) {
+                pom {
+                    groupId = project.group
+                    name = project.name
+                    description = 'Dagger with less boilerplate'
+                    url = 'https://github.com/azahnen/dagger-auto'
+                    from components.java
+                    licenses {
+                        license {
+                            name = 'The Apache License, Version 2.0'
+                            url = 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                        }
+                    }
+                    scm {
+                        connection = 'scm:git:git@github.com:azahnen/dagger-auto.git'
+                        developerConnection = 'scm:git:git@github.com:azahnen/dagger-auto.git'
+                        url = 'https://github.com/azahnen/dagger-auto'
+                    }
+                }
+            }
+        }
+    }
+
+    signing {
+        sign publishing.publications.mavenJava
+    }
+    tasks.withType(Sign) {
+        onlyIf { isReleaseVersion }
     }
 }
