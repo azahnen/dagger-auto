@@ -51,6 +51,13 @@ subprojects {
                         developerConnection = 'scm:git:git@github.com:azahnen/dagger-auto.git'
                         url = 'https://github.com/azahnen/dagger-auto'
                     }
+                    developers {
+                        developer {
+                            id = 'azahnen'
+                            name = 'Andreas Zahnen'
+                            //email = 'bmf@gmx.li'
+                        }
+                    }
                 }
             }
         }
