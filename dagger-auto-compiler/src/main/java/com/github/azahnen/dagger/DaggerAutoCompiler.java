@@ -155,7 +155,9 @@ public class DaggerAutoCompiler {
     || multiBinding.interfaceFullName.endsWith(".ContainerResponseFilter")
     || multiBinding.interfaceFullName.endsWith(".ContainerRequestFilter")
         || multiBinding.interfaceFullName.endsWith(".ExceptionMapper<?>")
-        || multiBinding.interfaceFullName.endsWith(".ExceptionMapper"));
+        || multiBinding.interfaceFullName.endsWith(".ExceptionMapper")
+        || multiBinding.interfaceFullName.endsWith(".ServletRegistration")
+        || multiBinding.interfaceFullName.endsWith(".FeatureFormatExtension"));
   }
 
   // TODO: scope
