@@ -7,4 +7,6 @@ public @interface AutoMultiBind {
   Type value() default Type.SET;
 
   boolean lazy() default true;
+
+  Class<?>[] exclude() default {};
 }

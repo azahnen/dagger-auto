@@ -5,29 +5,20 @@ import com.github.azahnen.dagger.annotations.AutoModule;
 import com.github.azahnen.dagger.annotations.AutoMultiBind;
 import com.github.azahnen.dagger.annotations.AutoMultiBind.Type;
 import dagger.assisted.AssistedFactory;
-import java.lang.annotation.Annotation;
-import java.util.AbstractMap.SimpleEntry;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
+
 import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.inject.Inject;
-import javax.lang.model.element.AnnotationValue;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.ElementKind;
-import javax.lang.model.element.ExecutableElement;
-import javax.lang.model.element.TypeElement;
-import javax.lang.model.element.VariableElement;
+import javax.lang.model.element.*;
 import javax.lang.model.type.DeclaredType;
 import javax.lang.model.type.TypeMirror;
+import java.lang.annotation.Annotation;
+import java.util.AbstractMap.SimpleEntry;
+import java.util.*;
+import java.util.Map.Entry;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 class DaggerAutoParser {
 
@@ -197,7 +188,15 @@ class DaggerAutoParser {
               }
             });
 
-    // TypeMirror.equals does not work, so we have to use a map to get distinct values
+     Set<String> excludes =
+             getSuperTypes(element.asType())
+                     .map(typeMirror -> processingEnv.getTypeUtils().asElement(typeMirror))
+                      .flatMap(multiElement -> getAnnotationValueClassArray(multiElement, AutoMultiBind.class, "exclude").stream()
+                              .map(typeMirror -> getFullNameWithGenericsAsWildcard(
+                                      processingEnv.getTypeUtils().asElement(typeMirror))))
+                      .collect(Collectors.toSet());
+
+      // TypeMirror.equals does not work, so we have to use a map to get distinct values
     Map<String, TypeMirror> bindInterfaces =
         getSuperTypes(element.asType())
             .filter(
@@ -206,6 +205,8 @@ class DaggerAutoParser {
                         || interfaces.containsKey(
                             getFullNameWithGenericsAsWildcard(
                                 processingEnv.getTypeUtils().asElement(superType))))
+            .filter(superType -> !excludes.contains(getFullNameWithGenericsAsWildcard(
+                    processingEnv.getTypeUtils().asElement(superType))))
             .collect(
                 Collectors.toMap(
                     TypeMirror::toString, Function.identity(), (first, second) -> first));
