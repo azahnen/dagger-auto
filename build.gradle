@@ -4,9 +4,14 @@ subprojects {
     apply plugin: 'maven-publish'
     apply plugin: 'signing'
 
+    ext {
+        isRelease = project.findProperty('release') == 'true'
+        versionSuffix = project.findProperty('release') != 'true' ? '-SNAPSHOT' : ''
+    }
+
     group = 'io.github.azahnen'
 
-    version = '0.9.1'
+    version = '1.0.0' + versionSuffix
 
     repositories {
         mavenCentral()
@@ -17,14 +22,12 @@ subprojects {
         withSourcesJar()
     }
 
-    ext.isReleaseVersion = !version.endsWith("SNAPSHOT")
-
     publishing {
         repositories {
             maven {
                 def releaseRepo = "https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/"
                 def snapshotRepo = "https://s01.oss.sonatype.org/content/repositories/snapshots/"
-                url = isReleaseVersion ? releaseRepo : snapshotRepo
+                url = isRelease ? releaseRepo : snapshotRepo
                 credentials {
                     username = project.hasProperty('ossrhUsername') ? ossrhUsername : "Unknown user"
                     password = project.hasProperty('ossrhPassword') ? ossrhPassword : "Unknown password"
@@ -67,6 +70,6 @@ subprojects {
         sign publishing.publications.mavenJava
     }
     tasks.withType(Sign) {
-        onlyIf { isReleaseVersion }
+        onlyIf { isRelease }
     }
 }
