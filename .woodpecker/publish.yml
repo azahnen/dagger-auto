@@ -1,0 +1,18 @@
+---
+steps:
+
+  publish-snapshot:
+    image: openjdk:11-slim
+    commands:
+      - ./gradlew publish -Pbranch=$CI_COMMIT_BRANCH -PossrhUsername=$OSSRH_USER -PossrhPassword=$OSSRH_PASSWORD
+    secrets: [ ossrh_user, ossrh_password]
+    when:
+      event: push
+
+  publish-release:
+    image: openjdk:11-slim
+    commands:
+      - ./gradlew publish -Prelease=true -PossrhUsername=$OSSRH_USER -PossrhPassword=$OSSRH_PASSWORD
+    secrets: [ ossrh_user, ossrh_password]
+    when:
+      event: tag
