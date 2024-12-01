@@ -316,7 +316,7 @@ class DaggerAutoParser {
 
                             return Stream.empty();
                         })
-                .collect(Collectors.toMap(Entry::getKey, Entry::getValue));
+                .collect(Collectors.toMap(Entry::getKey, Entry::getValue, (first, second) -> first));
     }
 
     private Stream<Map.Entry<String, String>> getProductInjections(VariableElement element) {
