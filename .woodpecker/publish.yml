@@ -2,7 +2,7 @@
 steps:
 
   publish-snapshot:
-    image: eclipse-temurin:21
+    image: eclipse-temurin:17
     commands:
       - ./gradlew publish -Pbranch=$CI_COMMIT_BRANCH -PossrhUsername=$OSSRH_USER -PossrhPassword=$OSSRH_PASSWORD
     secrets: [ ossrh_user, ossrh_password]
