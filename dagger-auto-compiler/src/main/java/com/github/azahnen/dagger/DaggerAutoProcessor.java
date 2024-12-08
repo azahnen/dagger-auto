@@ -20,7 +20,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-@SupportedSourceVersion(SourceVersion.RELEASE_21)
+@SupportedSourceVersion(SourceVersion.RELEASE_17)
 @AutoService(Processor.class)
 public class DaggerAutoProcessor extends AbstractProcessor {
 
