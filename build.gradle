@@ -25,6 +25,9 @@ subprojects {
         withSourcesJar()
     }
 
+    //TODO: currently a release has to be done locally because of the gpg key
+    //TODO: currently a release will only create a staging repository that has to be released manually, see https://central.sonatype.org/pages/ossrh-guide.html
+    // that could be automated with the nexus-staging-gradle-plugin, see https://github.com/gradle-nexus/publish-plugin/
     publishing {
         repositories {
             maven {
