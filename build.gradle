@@ -22,6 +22,10 @@ subprojects {
         withSourcesJar()
     }
 
+    tasks.withType(JavaCompile).configureEach {
+        options.release = 11
+    }
+
     publishing {
         repositories {
             maven {
