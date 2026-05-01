@@ -112,7 +112,7 @@ public class DaggerAutoCompiler {
         .map(
             entry ->
                 String.format(
-                    "@javax.inject.Singleton\n"
+                    "@jakarta.inject.Singleton\n"
                         + "@dagger.Provides\n"
                         + "@dagger.multibindings.ElementsIntoSet\n"
                         + "static %1$s %2$sExternal(%3$s externalMultiBindings) {\n"
@@ -198,7 +198,7 @@ public class DaggerAutoCompiler {
             injections, injections2, module.moduleName + nameSuffix);
 
     return String.format(
-        "package %s;\n\n@javax.inject.Singleton\n@dagger.Component(modules = {%s.class})\npublic interface %s {\n\n%s\n\n%s\n\n}",
+        "package %s;\n\n@jakarta.inject.Singleton\n@dagger.Component(modules = {%s.class})\npublic interface %s {\n\n%s\n\n%s\n\n}",
         module.packageName,
         module.qualifiedName() + moduleNameSuffix,
         module.moduleName + nameSuffix,
@@ -415,7 +415,7 @@ public class DaggerAutoCompiler {
             wrapperModuleName, externalMultiBindings);
 
     return String.format(
-        "@javax.inject.Singleton\n@dagger.Provides\nstatic %s create(%s) {\n\treturn %s.builder()\n\t%s\n\t%s\n\t.build();\n}",
+        "@jakarta.inject.Singleton\n@dagger.Provides\nstatic %s create(%s) {\n\treturn %s.builder()\n\t%s\n\t%s\n\t.build();\n}",
         componentName, injections, daggerComponentName, builderParameters, builderParameters2);
   }
 
@@ -448,7 +448,7 @@ public class DaggerAutoCompiler {
             + binding.interfaceSimpleName.substring(1);
 
     return String.format(
-        "@javax.inject.Singleton\n@dagger.Provides\nstatic %s %s(%s component) {\n\treturn component.%s();\n}",
+        "@jakarta.inject.Singleton\n@dagger.Provides\nstatic %s %s(%s component) {\n\treturn component.%s();\n}",
         binding.interfaceFullName, methodName, componentName, methodName);
   }
 
@@ -522,7 +522,7 @@ public class DaggerAutoCompiler {
       case SET:
       default:
         return String.format(
-            "@javax.inject.Singleton\n"
+            "@jakarta.inject.Singleton\n"
                 + "@dagger.Provides\n"
                 + "@dagger.multibindings.ElementsIntoSet\n"
                 + "static java.util.Set<%1$s> %2$sExternal(%3$s externalMultiBindings) {\n"
@@ -588,7 +588,7 @@ public class DaggerAutoCompiler {
       case SET:
       default:
         return String.format(
-            "@javax.inject.Singleton\n"
+            "@jakarta.inject.Singleton\n"
                 + "@dagger.Provides\n"
                 + "@dagger.multibindings.ElementsIntoSet\n"
                 + "static java.util.Set<%1$s> %2$s(%3$s component) {\n"

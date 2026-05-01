@@ -11,7 +11,7 @@ subprojects {
 
     group = 'io.github.azahnen'
 
-    version = '1.0.0' + versionSuffix
+    version = '2.0.0' + versionSuffix
 
     repositories {
         mavenCentral()
