@@ -1,12 +1,12 @@
-/*plugins {
+plugins {
     id ("org.danilopianini.publish-on-central") version "9.2.2" apply(false)
-}*/
+}
 
 subprojects {
     apply plugin: 'java-library'
     apply plugin: 'maven-publish'
     apply plugin: 'signing'
-    //apply plugin: "org.danilopianini.publish-on-central"
+    apply plugin: "org.danilopianini.publish-on-central"
 
     ext {
         isRelease = project.findProperty('release') == 'true'
@@ -29,13 +29,6 @@ subprojects {
         withSourcesJar()
     }
 
-    /*publishOnCentral {
-        repoOwner.set("azahnen")
-    }*/
-
-    //TODO: currently a release has to be done locally because of the gpg key
-    //TODO: currently a release will only create a staging repository that has to be released manually, see https://central.sonatype.org/pages/ossrh-guide.html
-    // that could be automated with the nexus-staging-gradle-plugin, see https://github.com/gradle-nexus/publish-plugin/
     publishing {
         repositories {
             maven {
@@ -81,6 +74,9 @@ subprojects {
     }
 
     signing {
+        def signingKey = findProperty("signingKey")
+        def signingPassword = findProperty("signingPassword")
+        useInMemoryPgpKeys(signingKey, signingPassword)
         sign publishing.publications.mavenJava
     }
     tasks.withType(Sign) {

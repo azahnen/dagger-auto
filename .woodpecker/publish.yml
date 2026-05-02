@@ -12,10 +12,8 @@ steps:
   publish-release:
     image: eclipse-temurin:21
     commands:
-      #- ./gradlew publish -Prelease=true -PossrhUsername=$OSSRH_USER -PossrhPassword=$OSSRH_PASSWORD
-      - echo "needs gpg key, has to be done locally for now"
-      - exit 1
-    secrets: [ ossrh_user, ossrh_password]
+      - ./gradlew publishMavenJavaPublicationToProjectLocalRepository zipMavenCentralPortalPublication releaseMavenCentralPortalPublication -Prelease=true -PmavenCentralPortalUsername=$OSSRH_USER -PmavenCentralPortalPassword=$OSSRH_PASSWORD -PsigningKey=$SIGNING_KEY -PsigningPassword=$SIGNING_PASSWORD
+    secrets: [ ossrh_user, ossrh_password, signing_key, signing_password ]
     when:
       event: tag
 
