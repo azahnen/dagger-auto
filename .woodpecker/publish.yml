@@ -4,7 +4,7 @@ steps:
   publish-snapshot:
     image: eclipse-temurin:21
     commands:
-      - ./gradlew publish -Pbranch=$CI_COMMIT_BRANCH -PossrhUsername=$OSSRH_USER -PossrhPassword=$OSSRH_PASSWORD
+      - ./gradlew publish -Pbranch=$CI_COMMIT_BRANCH -PmavenCentralPortalUsername=$OSSRH_USER -PmavenCentralPortalPassword=$OSSRH_PASSWORD
     secrets: [ ossrh_user, ossrh_password]
     when:
       event: push
