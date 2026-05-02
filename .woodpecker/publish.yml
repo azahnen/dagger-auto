@@ -4,7 +4,7 @@ steps:
   publish-snapshot:
     image: eclipse-temurin:21
     commands:
-      - ./gradlew publishMavenJavaPublicationToMavenRepository -Pbranch=$CI_COMMIT_BRANCH -PmavenCentralPortalUsername=$OSSRH_USER -PmavenCentralPortalPassword=$OSSRH_PASSWORD
+      - ./gradlew publishMavenJavaPublicationToMavenRepository -Pbranch=$CI_COMMIT_BRANCH -PmavenCentralPortalUsername="$OSSRH_USER" -PmavenCentralPortalPassword="$OSSRH_PASSWORD"
     secrets: [ ossrh_user, ossrh_password]
     when:
       event: push
@@ -12,7 +12,7 @@ steps:
   publish-release:
     image: eclipse-temurin:21
     commands:
-      - ./gradlew publishMavenJavaPublicationToProjectLocalRepository zipMavenCentralPortalPublication releaseMavenCentralPortalPublication -Prelease=true -PmavenCentralPortalUsername=$OSSRH_USER -PmavenCentralPortalPassword=$OSSRH_PASSWORD -PsigningKey=$SIGNING_KEY -PsigningPassword=$SIGNING_PASSWORD
+      - ./gradlew publishMavenJavaPublicationToProjectLocalRepository zipMavenCentralPortalPublication releaseMavenCentralPortalPublication -Prelease=true -PmavenCentralPortalUsername="$OSSRH_USER" -PmavenCentralPortalPassword="$OSSRH_PASSWORD" -PsigningKey="$SIGNING_KEY" -PsigningPassword="$SIGNING_PASSWORD"
     secrets: [ ossrh_user, ossrh_password, signing_key, signing_password ]
     when:
       event: tag
